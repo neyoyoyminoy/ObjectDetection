@@ -1,0 +1,1 @@
+This is for my Design 2 project. We are using a Nvidia Jetson Orin Nano with two cameras. This part of the project is to refine the object detection to identify barcode location and eventually read any numbers.
