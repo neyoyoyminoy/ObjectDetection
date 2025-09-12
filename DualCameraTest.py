@@ -2,30 +2,48 @@ import cv2
 import numpy as np
 from pyzbar.pyzbar import decode
 
+def build_gst_pipeline(device, width=640, height=480, framerate=30):
+    """
+    Build a GStreamer pipeline string for a V4L2 camera device.
+    """
+    return (
+        f"v4l2src device={device} ! "
+        f"video/x-raw, width={width}, height={height}, framerate={framerate}/1 ! "
+        f"videoconvert ! appsink"
+    )
+
 def enhance(img):
-    """Apply contrast and sharpening to improve barcode detection."""
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(gray)
     blur = cv2.GaussianBlur(clahe, (0, 0), 1.0)
     return cv2.addWeighted(clahe, 1.5, blur, -0.5, 0)
 
-# Open both cameras
-caps = [cv2.VideoCapture(0), cv2.VideoCapture(1)]
+# List of camera devices (adjust if needed)
+devices = ["/dev/video0", "/dev/video1"]
+caps = []
 
-# Configure resolution for both
-for cap in caps:
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+# Try to open each camera with GStreamer
+for dev in devices:
+    cap = cv2.VideoCapture(build_gst_pipeline(dev), cv2.CAP_GSTREAMER)
+    if cap.isOpened():
+        print(f"[INFO] Opened {dev}")
+        caps.append(cap)
+    else:
+        print(f"[WARN] Could not open {dev}")
 
-print("Press 'q' in any window to quit.")
+if not caps:
+    print("[ERROR] No cameras available.")
+    exit(1)
+
+print("Press 'q' to quit.")
 
 while True:
     for i, cap in enumerate(caps):
         ret, frame = cap.read()
         if not ret:
+            print(f"[WARN] Camera {i} failed to return a frame.")
             continue
 
-        # Enhance frame for better barcode recognition
         processed = enhance(frame)
         barcodes = decode(processed)
 
@@ -40,11 +58,9 @@ while True:
 
         cv2.imshow(f"Camera {i}", frame)
 
-    # Allow exit with 'q'
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-# Cleanup
 for cap in caps:
     cap.release()
 cv2.destroyAllWindows()
